@@ -48,6 +48,19 @@ object ConfluenceHTMLToJiraMarkdownConverter {
       })
   }
 
+  def getCodeLanguage(attributes: Map[String, String]): String = {
+    val defaultCodeLanguage = "bash"
+    val attributeStringPattern = "([A-Za-z]+)[\\s]*:[\\s]*([A-Za-z]+)".r
+    attributes.get("data-syntaxhighlighter-params").fold(defaultCodeLanguage)(attributeListString => {
+      attributeListString.split(";")
+        .find(attributeString => attributeString.trim.toLowerCase().startsWith("brush")).fold(defaultCodeLanguage)(
+        {
+          case attributeStringPattern(_, value) => value
+          case _ => defaultCodeLanguage
+        })
+    })
+  }
+
   def getJiraMarkdown(node: Any , level: Int = 0,
                       checkBoxFlag: Boolean = false): String = {
     val getStringFromChildNodes: (List[_] => String) = _.map(childNode => getJiraMarkdown(childNode, level)).mkString("")
@@ -64,7 +77,11 @@ object ConfluenceHTMLToJiraMarkdownConverter {
         val checkBoxSymbol: String = if(isChecklist) if (isChecked) "(/) " else "(x) " else ""
         val childString = getStringFromChildNodes(children)
         if (childString.trim != "") ("*" * level) + " " + checkBoxSymbol + childString else ""
-      case Tag("pre", attributes, children) if (attributes.get("class").head == "syntaxhighlighter-pre") => "{code:bash}" + getStringFromChildNodes(children) + "\n{code}"
+      case Tag("pre", attributes, children) if (attributes.get("class").head == "syntaxhighlighter-pre") => {
+        val codeLanguage = getCodeLanguage(attributes)
+        s"{code:$codeLanguage}" + getStringFromChildNodes(children) + "\n{code}"
+      }
+
       case Tag("strong", _, children) => "*" + getStringFromChildNodes(children).trim.replace("*", "\\*") + "*"
       case Tag("em", _, children) => "_" + getStringFromChildNodes(children).trim.replace("_", "\\_") + "_"
       case Text(content) =>  if (content != "\u00A0" && content.stripLineEnd != "") content else ""
